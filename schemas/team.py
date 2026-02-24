@@ -4,6 +4,7 @@ from typing import Optional
 
 class TeamCreate(BaseModel):
     name: str
+    manager_id: Optional[UUID] = None
 
 class TeamRead(BaseModel):
     id: UUID

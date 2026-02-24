@@ -15,4 +15,4 @@ class UserTeam(Base):
     team_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("teams.id", ondelete="CASCADE"), primary_key=True
     )
-    joined_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now(UTC))
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.now(UTC))

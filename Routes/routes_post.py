@@ -1,15 +1,25 @@
 from core.database import async_get_db
 from core.database import get_db
-from core.auth import create_access_token, hash_password, get_current_user, require_roles, verify_password
+from core.auth import (
+    create_access_token,
+    hash_password,
+    get_current_user,
+    require_roles,
+    verify_password,
+)
 from datetime import datetime, UTC
 from fastapi import Depends, APIRouter, HTTPException
+from models.task import Task, TaskPriority, TaskStatus
+from models.team import Team
 from models.user import User, UserRole
-from models.task import Task,TaskPriority,TaskStatus
 from models.userteam import UserTeam
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio.session import AsyncSession
 from schemas.user import UserLogin, UserRead, UserCreate, TokenResponse
 from schemas.task import TaskCreate, TaskRead, TaskUpdate
+from schemas.team import TeamCreate, TeamRead, TeamUpdate
+from schemas.userteam import AssignEmployeeRequest, UserTeamRead
+from uuid import UUID
 
 router = APIRouter()
 
@@ -65,14 +75,13 @@ async def create_user(
 
     return {"message": f"{user.role} Created Successfully"}
 
+
 @router.post("/login", response_model=TokenResponse)
 async def login(
     user: UserLogin,
     db: AsyncSession = Depends(async_get_db),
 ):
-    result = await db.execute(
-        select(User).where(User.email == user.email)
-    )
+    result = await db.execute(select(User).where(User.email == user.email))
     db_user = result.scalar_one_or_none()
 
     if not db_user:
@@ -93,6 +102,7 @@ async def login(
         token=access_token,
         role=db_user.role,
     )
+
 
 @router.post("/tasks", response_model=TaskRead, status_code=201)
 async def create_task(
@@ -142,3 +152,120 @@ async def create_task(
     await db.refresh(new_task)
 
     return new_task
+
+
+@router.post("/teams", response_model=TeamRead, status_code=201)
+async def create_team(
+    team: TeamCreate,
+    db: AsyncSession = Depends(async_get_db),
+    current_user: User = Depends(require_roles("Admin", "Manager")),
+):
+    if current_user.role == UserRole.MANAGER:
+        owner_id = current_user.id
+
+    else:
+        if not team.manager_id:
+            raise HTTPException(
+                status_code=400,
+                detail="manager_id is required when admin creates team",
+            )
+
+        manager = (
+            await db.execute(
+                select(User).where(
+                    User.id == team.manager_id,
+                    User.role == UserRole.MANAGER,
+                )
+            )
+        ).scalar_one_or_none()
+
+        if not manager:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid manager_id",
+            )
+
+        owner_id = manager.id
+
+    new_team = Team(name=team.name, created_by_id=owner_id)
+
+    db.add(new_team)
+    await db.flush()
+
+    membership = UserTeam(
+        user_id=owner_id,
+        team_id=new_team.id,
+    )
+
+    db.add(membership)
+
+    await db.commit()
+    await db.refresh(new_team)
+
+    return new_team
+
+
+@router.post("/teams_assign", status_code=201)
+async def assign_employee_to_team(
+    data: AssignEmployeeRequest,
+    db: AsyncSession = Depends(async_get_db),
+    current_user: User = Depends(require_roles("Manager")),
+):
+    team = (
+        await db.execute(
+            select(Team).where(
+                Team.id == data.team_id,
+                Team.is_deleted == False,
+            )
+        )
+    ).scalar_one_or_none()
+
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    if team.created_by_id != current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="You can only assign employees to your own team",
+        )
+
+    employee = (
+        await db.execute(
+            select(User).where(
+                User.id == data.employee_id,
+                User.role == UserRole.EMPLOYEE,
+                User.is_active == True,
+            )
+        )
+    ).scalar_one_or_none()
+
+    if not employee:
+        raise HTTPException(
+            status_code=404,
+            detail="Employee not found",
+        )
+
+    existing_membership = (
+        await db.execute(
+            select(UserTeam).where(
+                UserTeam.team_id == data.team_id,
+                UserTeam.user_id == data.employee_id,
+            )
+        )
+    ).scalar_one_or_none()
+
+    if existing_membership:
+        raise HTTPException(
+            status_code=400,
+            detail="Employee already in this team",
+        )
+
+    membership = UserTeam(
+        user_id=data.employee_id,
+        team_id=data.team_id,
+    )
+
+    db.add(membership)
+    await db.commit()
+
+    return {"message": "Employee assigned successfully"}

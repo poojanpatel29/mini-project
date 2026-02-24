@@ -11,3 +11,8 @@ class UserTeamRead(BaseModel):
     model_config = {
         "from_attributes": True
     }
+
+
+class AssignEmployeeRequest(BaseModel):
+    team_id: UUID
+    employee_id: UUID
