@@ -8,7 +8,7 @@ class UserCreate(BaseModel):
     name: str
     email: EmailStr
     password: str
-    role: UserRole
+    role: Optional[UserRole] = None
 
 class UserRead(BaseModel):
     id: UUID
@@ -27,3 +27,11 @@ class UserUpdate(BaseModel):
     password: Optional[str] = None
     role: Optional[UserRole] = None
     is_active: Optional[bool] = None
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+class TokenResponse(BaseModel):
+    token: str
+    role: UserRole

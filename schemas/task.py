@@ -10,9 +10,10 @@ from models.task import TaskPriority, TaskStatus
 class TaskCreate(BaseModel):
     title: str
     description: Optional[str] = None
-    priority: TaskPriority
-    team_id: UUID
+    priority: Optional[TaskPriority] = None
+    team_id: Optional[UUID] = None
     assignee_id: Optional[UUID] = None
+    manager_id: Optional[UUID] = None
 
 class TaskRead(BaseModel):
     id: UUID
@@ -20,7 +21,7 @@ class TaskRead(BaseModel):
     description: Optional[str]
     priority: TaskPriority
     status: TaskStatus
-    team_id: UUID
+    team_id: Optional[UUID]
     created_by_id: UUID
     assignee_id: Optional[UUID]
     is_deleted: bool

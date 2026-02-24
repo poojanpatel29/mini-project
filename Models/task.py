@@ -28,15 +28,31 @@ class Task(Base):
     )
     title: Mapped[str] = mapped_column(nullable=False)
     description: Mapped[Optional[str]] = mapped_column(nullable=True)
-    priority: Mapped[TaskPriority] = mapped_column(sEnum(TaskPriority), default=TaskPriority.MEDIUM)
-    status: Mapped[TaskStatus] = mapped_column(sEnum(TaskStatus), default=TaskStatus.TODO)
-    team_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("teams.id"), nullable=False)
-    created_by_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
-    assignee_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    priority: Mapped[TaskPriority] = mapped_column(
+        sEnum(TaskPriority), default=TaskPriority.MEDIUM
+    )
+    status: Mapped[TaskStatus] = mapped_column(
+        sEnum(TaskStatus), default=TaskStatus.TODO
+    )
+    team_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("teams.id", ondelete="SET NULL"), nullable=True
+    )
+    created_by_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    assignee_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     is_deleted: Mapped[bool] = mapped_column(default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now(UTC))
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now(UTC), onupdate=datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.now(UTC), onupdate=datetime.now(UTC)
+    )
 
-    team = relationship("Team",back_populates="tasks")
-    creator = relationship("User",back_populates="created_tasks",foreign_keys=[created_by_id])
-    assignee = relationship("User",back_populates="assigned_tasks",foreign_keys=[assignee_id])
+    team = relationship("Team", back_populates="tasks")
+    creator = relationship(
+        "User", back_populates="created_tasks", foreign_keys=[created_by_id]
+    )
+    assignee = relationship(
+        "User", back_populates="assigned_tasks", foreign_keys=[assignee_id]
+    )
