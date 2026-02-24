@@ -9,10 +9,10 @@ import uuid
 class UserTeam(Base):
     __tablename__ = "user_teams"
 
-    user_id: Mapped[str] = mapped_column(
+    user_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
-    team_id: Mapped[str] = mapped_column(
+    team_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("teams.id", ondelete="CASCADE"), primary_key=True
     )
     joined_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now(UTC))

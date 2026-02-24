@@ -23,19 +23,16 @@ class TaskStatus(str, eEnum):
 class Task(Base):
     __tablename__ = "tasks"
 
-    id: Mapped[str] = mapped_column(
-    String(36),
-    primary_key=True,
-    default=lambda: str(uuid.uuid4()),
-    index=True
-)
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(String(100))
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, index=True, default=uuid.uuid4
+    )
+    title: Mapped[str] = mapped_column(nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(nullable=True)
     priority: Mapped[TaskPriority] = mapped_column(sEnum(TaskPriority), default=TaskPriority.MEDIUM)
     status: Mapped[TaskStatus] = mapped_column(sEnum(TaskStatus), default=TaskStatus.TODO)
-    team_id: Mapped[str] = mapped_column(ForeignKey("teams.id"), nullable=False)
-    created_by_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
-    assignee_id: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    team_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("teams.id"), nullable=False)
+    created_by_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    assignee_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id"), nullable=True)
     is_deleted: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now(UTC), onupdate=datetime.now(UTC))

@@ -9,14 +9,11 @@ import uuid
 class InviteToken(Base):
     __tablename__ = "invite_tokens"
 
-    id: Mapped[str] = mapped_column(
-    String(36),
-    primary_key=True,
-    default=lambda: str(uuid.uuid4()),
-    index=True
-)
-    team_id: Mapped[str] = mapped_column(ForeignKey("teams.id"), nullable=False)
-    created_by_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, index=True, default=uuid.uuid4
+    )
+    team_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("teams.id"), nullable=False)
+    created_by_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(nullable=False)
     is_used: Mapped[bool] = mapped_column(default=False)
 

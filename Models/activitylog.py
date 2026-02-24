@@ -9,14 +9,11 @@ import uuid
 class ActivityLog(Base):
     __tablename__ = "activity_logs"
 
-    id: Mapped[str] = mapped_column(
-    String(36),
-    primary_key=True,
-    default=lambda: str(uuid.uuid4()),
-    index=True
-)
-    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
-    action_type: Mapped[str] = mapped_column(String(100),nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, index=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    action_type: Mapped[str] = mapped_column(nullable=False)
     resource_id: Mapped[int] = mapped_column(nullable=False)
     timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.now(UTC))
 

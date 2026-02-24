@@ -15,14 +15,15 @@ class UserRole(str, eEnum):
 class User(Base):
     __tablename__ = "users"
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid.uuid4()), index=True
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, index=True, default=uuid.uuid4
     )
-    name: Mapped[str] = mapped_column(String(100), nullable=False)
+ 
+    name: Mapped[str] = mapped_column(nullable=False)
     email: Mapped[str] = mapped_column(
         String(100), unique=True, index=True, nullable=False
     )
-    password: Mapped[str] = mapped_column(String(100), nullable=False)
+    password: Mapped[str] = mapped_column(nullable=False)
     role: Mapped[UserRole] = mapped_column(
         sEnum(UserRole), default=UserRole.EMPLOYEE, nullable=False
     )
