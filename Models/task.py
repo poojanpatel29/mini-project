@@ -1,4 +1,4 @@
-from Core.database import Base
+from core.database import Base
 from datetime import datetime, date, UTC
 from enum import Enum as eEnum
 from sqlalchemy import String, ForeignKey, DateTime, Enum as sEnum, Text, Boolean, UUID

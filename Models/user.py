@@ -1,4 +1,4 @@
-from Core.database import Base
+from core.database import Base
 from enum import Enum as eEnum
 from sqlalchemy import Enum as sEnum, Boolean, UUID, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship, DeclarativeBase

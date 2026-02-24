@@ -1,4 +1,4 @@
-from Core.database import Base
+from core.database import Base
 from .user import User
 from .team import Team
 from .task import Task
