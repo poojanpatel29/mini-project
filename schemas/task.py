@@ -33,9 +33,15 @@ class TaskRead(BaseModel):
     }
 
 class TaskUpdate(BaseModel):
+    task_id: Optional[UUID] = None
     title: Optional[str] = None
     description: Optional[str] = None
     priority: Optional[TaskPriority] = None
     status: Optional[TaskStatus] = None
     assignee_id: Optional[UUID] = None
     is_deleted: Optional[bool] = None
+
+class AssignTaskRequest(BaseModel):
+    task_id: UUID
+    team_id: UUID
+    employee_id: UUID
