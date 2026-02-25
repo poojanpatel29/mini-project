@@ -16,5 +16,6 @@ class InviteToken(Base):
     created_by_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(nullable=False)
     is_used: Mapped[bool] = mapped_column(default=False)
+    invite_token: Mapped[str] = mapped_column(nullable=True, index=True)
 
     team = relationship("Team",back_populates="invites")

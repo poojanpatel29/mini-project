@@ -1,3 +1,5 @@
+from typing import List
+
 from core.database import async_get_db
 from core.database import get_db
 from core.auth import hash_password, require_roles
@@ -7,7 +9,7 @@ from models.task import Task
 from models.team import Team
 from models.userteam import UserTeam
 from sqlalchemy.ext.asyncio.session import AsyncSession
-from schemas.user import UserRead, UserCreate
+from schemas.user import UserRead, UserCreate, UserUpdate
 from schemas.task import AssignTaskRequest, TaskRead, TaskUpdate
 from schemas.team import TeamCreate, TeamRead, TeamUpdate
 from sqlalchemy import select
@@ -164,3 +166,90 @@ async def update_team(
     await db.refresh(existing_record)
     db.close()
     return existing_record
+
+
+@router.patch("/update_user", response_model=UserRead)
+async def update_user(
+    update_data: UserUpdate,
+    user: User = Depends(require_roles("Admin", "Manager", "Employee")),
+    db: AsyncSession = Depends(async_get_db),
+):
+    query = select(User).where(User.id == update_data.user_id)
+    result = await db.execute(query)
+    result = result.scalars().first()
+ 
+    if not result:
+        raise HTTPException(status_code=404, detail="User not found")
+ 
+    if user.role != "Admin" and update_data.role is not None:
+        raise HTTPException(status_code=403, detail="Only admin can change role.")
+ 
+    if result.role == "Admin":
+        raise HTTPException(status_code=400, detail="You cannot change Admin's role.")
+ 
+    if result.role == update_data.role:
+        raise HTTPException(status_code=400, detail="The user has same role as of now.")
+ 
+    if result.role == "Manager" and update_data.role == "Employee":
+        raise HTTPException(status_code=400, detail="Cannot demote User")
+ 
+    if result.role == "Manager" and update_data.role == "Admin":
+        raise HTTPException(status_code=400, detail="Highest Level reached")
+   
+    if user.role in ["Admin","Manager"] and update_data.role!="Admin":
+        if update_data.is_active is not None:
+            result.is_active=update_data.is_active
+
+    if update_data.name and update_data.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Only employee can change his/her name.")
+   
+    if update_data.user_id==user.id and update_data.name:
+        result.name=update_data.name
+   
+    if update_data.role:
+        result.role=update_data.role
+    await db.commit()
+    await db.refresh(result)
+    return result
+
+@router.patch("/bulk-update", response_model=List[TaskRead])
+async def bulk_update_tasks(
+    updates: List[TaskUpdate],
+    user: User = Depends(require_roles("Admin", "Manager")),
+    db: AsyncSession = Depends(async_get_db),
+):
+    if not updates:
+        raise HTTPException(status_code=400, detail="Update list cannot be empty")
+ 
+    task_ids = [u.task_id for u in updates]
+    query = select(Task).where(Task.id.in_(task_ids))
+    result = await db.execute(query)
+    existing_tasks = {t.id: t for t in result.scalars().all()}
+ 
+    if len(existing_tasks) != len(task_ids):
+        raise HTTPException(status_code=404, detail="Some of the task Ids are not available.")
+ 
+    updated_objects = []
+    for update_data in updates:
+        target_task = existing_tasks.get(update_data.task_id)
+ 
+        if user.role == "Manager" and target_task.created_by_id != user.id:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Task {target_task.id} is not yours"
+            )
+ 
+        update_dict = update_data.model_dump(exclude_unset=True, exclude={"task_id"})
+        for key, value in update_dict.items():
+            setattr(target_task, key, value)
+ 
+        updated_objects.append(target_task)
+ 
+    try:
+        await db.commit()
+        for t in updated_objects:
+            await db.refresh(t)
+        return updated_objects
+    except Exception:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail="Bulk update failed")

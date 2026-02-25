@@ -1,24 +1,30 @@
+import secrets
+from typing import List
+
+import jwt
+from core.config import settings
 from core.database import async_get_db
 from core.database import get_db
 from core.auth import (
     create_access_token,
     hash_password,
-    get_current_user,
     require_roles,
     verify_password,
 )
-from datetime import datetime, UTC
-from fastapi import Depends, APIRouter, HTTPException
+from datetime import datetime, UTC, timedelta
+from fastapi import BackgroundTasks, Depends, APIRouter, HTTPException
 from models.task import Task, TaskPriority, TaskStatus
 from models.team import Team
 from models.user import User, UserRole
 from models.userteam import UserTeam
+from models.invitetoken import InviteToken
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio.session import AsyncSession
 from schemas.user import UserLogin, UserRead, UserCreate, TokenResponse
 from schemas.task import TaskCreate, TaskRead, TaskUpdate
 from schemas.team import TeamCreate, TeamRead, TeamUpdate
 from schemas.userteam import AssignEmployeeRequest, UserTeamRead
+from utils.helper import send_task_completion_email
 from uuid import UUID
 
 router = APIRouter()
@@ -110,39 +116,13 @@ async def create_task(
     db: AsyncSession = Depends(async_get_db),
     current_user: User = Depends(require_roles("Admin", "Manager")),
 ):
-    if current_user.role == UserRole.MANAGER:
-        owner_id = current_user.id
-
-    else:
-        if not task.manager_id:
-            raise HTTPException(
-                status_code=400,
-                detail="manager_id required when admin creates task",
-            )
-
-        manager = (
-            await db.execute(
-                select(User).where(
-                    User.id == task.manager_id,
-                    User.role == UserRole.MANAGER,
-                )
-            )
-        ).scalar_one_or_none()
-
-        if not manager:
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid manager_id",
-            )
-
-        owner_id = manager.id
 
     new_task = Task(
         title=task.title,
         description=task.description,
         priority=task.priority,
         team_id=task.team_id,
-        created_by_id=owner_id,
+        created_by_id=current_user.id,
         assignee_id=task.assignee_id,
         is_deleted=False,
     )
@@ -269,3 +249,81 @@ async def assign_employee_to_team(
     await db.commit()
 
     return {"message": "Employee assigned successfully"}
+
+from schemas.invite import InviteCreate, InviteRead
+
+@router.post("/create_invite", response_model=InviteRead)
+async def create_invite_token(
+    background_task: BackgroundTasks,
+    data: InviteCreate,
+    db: AsyncSession = Depends(async_get_db),
+    current_user: User = Depends(require_roles("Manager")),
+):
+ 
+    team = await db.get(Team, data.team_id)
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+    if team.created_by_id != current_user.id:
+        raise HTTPException(
+            status_code=403, detail="You can only create invite for your own team"
+        )
+    query = select(User).where(
+        User.email == data.user_email, User.role == "Employee"
+    )
+    result = await db.execute(query)
+    db_user = result.scalars().first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="email not found")
+    query = select(UserTeam).where(
+        UserTeam.user_id == db_user.id, UserTeam.team_id == data.team_id
+    )
+    result = await db.execute(query)
+    existing_membership = result.scalars().first()
+    if existing_membership:
+        raise HTTPException(
+            status_code=400, detail="User is already a member of this team"
+        )
+    payload = {
+        "sub": data.user_email,
+        "team_id": str(data.team_id)
+    }
+ 
+    new_token_string= jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    invite = InviteToken(
+        team_id=data.team_id,
+        created_by_id=current_user.id,
+        invite_token=new_token_string,
+        expires_at = (datetime.now(UTC) + timedelta(hours=24)).replace(tzinfo=None)
+    )
+ 
+    db.add(invite)
+    await db.commit()
+    await db.refresh(invite)
+    background_task.add_task(
+        send_task_completion_email, data.user_email, new_token_string
+    )
+    return invite
+
+
+@router.post("/bulk-create", response_model=List[TaskRead])
+async def bulk_create_tasks(
+    tasks: List[TaskCreate],
+    user: User = Depends(require_roles("Admin", "Manager")),
+    db: AsyncSession = Depends(async_get_db),
+):
+    if not tasks:
+        raise HTTPException(status_code=400, detail="Task list cannot be empty")
+ 
+    new_tasks = [Task(**task.model_dump(), created_by_id=user.id) for task in tasks]
+ 
+    try:
+        db.add_all(new_tasks)
+        await db.commit()
+ 
+        for task in new_tasks:
+            await db.refresh(task)
+ 
+        return new_tasks
+    except Exception:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail="Bulk upload failed")

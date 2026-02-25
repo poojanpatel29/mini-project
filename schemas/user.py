@@ -22,6 +22,7 @@ class UserRead(BaseModel):
     }
 
 class UserUpdate(BaseModel):
+    user_id: Optional[UUID] = None
     name: Optional[str] = None
     email: Optional[EmailStr] = None
     password: Optional[str] = None

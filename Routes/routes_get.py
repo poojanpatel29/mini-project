@@ -1,11 +1,14 @@
+import jwt
+from core.config import settings
 from core.database import async_get_db
 from core.database import get_db
 from core.auth import hash_password, require_roles, get_current_user
 from fastapi import Depends, APIRouter, HTTPException
 from models.user import User, UserRole
 from models.team import Team
-from models.task import Task
+from models.task import Task, TaskStatus, TaskPriority
 from models.userteam import UserTeam
+from models.invitetoken import InviteToken
 from sqlalchemy.ext.asyncio.session import AsyncSession
 from sqlalchemy import func, select
 from schemas.user import UserRead, UserCreate
@@ -231,6 +234,48 @@ async def get_team_details(
         ),
         members=members_data,
     )
+
+
+@router.get("/verify-invite/{token}")
+async def verify_invite_token(token: str, db: AsyncSession = Depends(async_get_db)):
+    query = select(InviteToken).where(InviteToken.invite_token == token)
+    result = await db.execute(query)
+    invite = result.scalar_one_or_none()
+ 
+    if not invite or invite.is_used:
+        raise HTTPException(status_code=400, detail="Invalid or used invite")
+ 
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        email: str = payload.get("sub")
+        token_team_id = UUID(payload.get("team_id"))
+    except (jwt.PyJWTError, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid token data")
+ 
+    user_query = select(User).where(User.email == email)
+    user_result = await db.execute(user_query)
+    db_user = user_result.scalar_one_or_none()
+ 
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+ 
+    user_id_to_add = db_user.id
+ 
+    new_membership = UserTeam(
+        user_id=user_id_to_add,
+        team_id=token_team_id
+    )
+   
+    invite.is_used = True
+    db.add(new_membership)
+   
+    await db.commit()
+ 
+    return {
+        "status": "success",
+        "user_id": user_id_to_add,
+        "team_id": token_team_id
+    }
 
 
 @router.get("/{user_id}", response_model=UserRead)

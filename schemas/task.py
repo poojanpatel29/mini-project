@@ -1,10 +1,10 @@
 # schemas/task.py
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from uuid import UUID
 from enum import Enum
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 from models.task import TaskPriority, TaskStatus
 
 class TaskCreate(BaseModel):
@@ -13,7 +13,6 @@ class TaskCreate(BaseModel):
     priority: Optional[TaskPriority] = None
     team_id: Optional[UUID] = None
     assignee_id: Optional[UUID] = None
-    manager_id: Optional[UUID] = None
 
 class TaskRead(BaseModel):
     id: UUID
@@ -45,3 +44,23 @@ class AssignTaskRequest(BaseModel):
     task_id: UUID
     team_id: UUID
     employee_id: UUID
+
+
+class TaskBulkCreate(BaseModel):
+    tasks: List[TaskCreate] = Field(..., min_length=1)
+ 
+    @field_validator("tasks")
+    def check_max_batch_size(cls, v: List[TaskCreate]) -> List[TaskCreate]:
+        if len(v) > 50:
+            raise ValueError("Bulk create limit is 50 tasks per request")
+        return v
+ 
+ 
+class TaskBulkDelete(BaseModel):
+    task_ids: List[UUID] = Field(..., min_length=1)
+ 
+    @field_validator("task_ids")
+    def check_max_batch_size(cls, v: List[UUID]) -> List[UUID]:
+        if len(v) > 50:
+            raise ValueError("Bulk delete limit is 50 tasks per request")
+        return v
